@@ -1,0 +1,12 @@
+canais.txt
+dados.js
+dados.json
+dados_pc.json
+historico.json
+*.tmp
+*.bak
+__pycache__/
+ultimo_log.txt
+data/
+*.vbs
+SPEC_PAINEL.md
