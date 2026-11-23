@@ -10,3 +10,4 @@ ultimo_log.txt
 data/
 *.vbs
 SPEC_PAINEL.md
+.gist_token

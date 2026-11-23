@@ -20,10 +20,29 @@ def carregar_cache():
     except Exception:
         pass
 
+GIST_ID = "9f6dfcef3d75c567a8cd6bf7a32c6538"  # gist secreto lido pelo app do celular
+_TOKEN = {}
+
+def enviar_celular():
+    """Manda a coleta do PC pro gist (o celular usa a mais recente entre PC e nuvem)."""
+    try:
+        import subprocess, gist_sync
+        tf = os.path.join(BASE, ".gist_token")
+        if "t" not in _TOKEN and os.path.exists(tf):
+            _TOKEN["t"] = open(tf).read().strip()
+        if "t" not in _TOKEN:
+            _TOKEN["t"] = subprocess.run(["gh", "auth", "token"], capture_output=True, text=True,
+                                         creationflags=coletar.NOWIN).stdout.strip()
+        if _TOKEN["t"]:
+            gist_sync.enviar(GIST_ID, _TOKEN["t"], {"dados_pc.json": coletar.JSON_FILE})
+    except Exception:
+        _TOKEN.pop("t", None)
+
 def coletar_agora(modo):
     STATE["coletando"] = True
     try:
         STATE["payload"] = coletar.run(modo); STATE["erro"] = None
+        threading.Thread(target=enviar_celular, daemon=True).start()
     except Exception:
         STATE["erro"] = traceback.format_exc(limit=2)
     finally:

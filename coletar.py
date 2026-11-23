@@ -79,14 +79,17 @@ def coletar_canal(cid, hist_videos, completo, pool):
     try: r = rss(cid)
     except Exception as ex: r = {}; c["erro"] = f"rss: {ex}"
     vids = {}
+    # base: lista conhecida (protege contra RSS/yt-dlp que às vezes voltam vazios)
+    for vid, hv in hist_videos.items():
+        if hv.get("canal") == cid:
+            vids[vid] = {"id": vid, "titulo": hv.get("titulo"), "views": ultimo(hv),
+                         "duracao": hv.get("duracao"), "short": hv.get("short", False)}
     if completo:
         for f in fl:
-            for v in f.result(): vids[v["id"]] = v
-    else:  # reaproveita a lista da última coleta completa
-        for vid, hv in hist_videos.items():
-            if hv.get("canal") == cid:
-                vids[vid] = {"id": vid, "titulo": hv.get("titulo"), "views": ultimo(hv),
-                             "duracao": hv.get("duracao"), "short": hv.get("short", False)}
+            for v in f.result():
+                old = vids.get(v["id"], {})
+                if v.get("views") is None: v["views"] = old.get("views")
+                vids[v["id"]] = v
     for vid, v in r.items():
         base = vids.get(vid, {})
         merged = {**base, **{k: val for k, val in v.items() if val is not None}}
