@@ -24,6 +24,11 @@ jobs:
           PAINEL_DIR: data
         run: |
           mkdir -p data
-          python gist_sync.py baixar historico.json
+          python gist_sync.py baixar historico.json canais.txt
+          cp data/canais.txt data/canais.orig 2>/dev/null || true
           python coletar.py completo
-          python gist_sync.py enviar dados.json historico.json
+          if [ -f data/canais.orig ] && ! cmp -s data/canais.txt data/canais.orig; then
+            python gist_sync.py enviar dados.json historico.json canais.txt
+          else
+            python gist_sync.py enviar dados.json historico.json
+          fi

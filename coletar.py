@@ -118,14 +118,55 @@ def afinar(serie, now, chave=lambda x: x[0]):
         if t[:13] not in vistos: vistos.add(t[:13]); out.append(p)
     return out
 
+def normalizar(s):
+    """Link/@handle/ID -> 'UC...' ou '@handle' (None se não reconhecer)."""
+    s = (s or "").split("#")[0].strip()
+    m = re.search(r"(UC[\w-]{22})", s)
+    if m: return m.group(1)
+    m = re.search(r"@([\w.\-]+)", s)
+    if m: return "@" + m.group(1)
+    return None
+
+def resolver(ent):
+    """'@handle' -> 'UC...' lendo a página do canal."""
+    if ent.startswith("UC"): return ent
+    h = get(f"https://www.youtube.com/{ent}?hl=en")
+    m = re.search(r'"externalId":"(UC[\w-]{22})"', h) or re.search(r'"channelId":"(UC[\w-]{22})"', h)
+    return m.group(1) if m else None
+
+def arquivo_canais():
+    p = os.path.join(DATA, "canais.txt")
+    return p if os.path.exists(p) else CANAIS_FILE
+
+def ler_canais():
+    """Lê canais.txt (aceita links/@handles), resolve para UC... e regrava o arquivo já resolvido."""
+    if os.environ.get("CANAIS") and not os.path.exists(arquivo_canais()):
+        return [i.strip() for i in os.environ["CANAIS"].split(",") if i.strip()]
+    path = arquivo_canais()
+    linhas = open(path, encoding="utf-8").read().splitlines()
+    ids, novas, mudou = [], [], False
+    for l in linhas:
+        ent = normalizar(l)
+        if not ent: novas.append(l); continue
+        if not ent.startswith("UC"):
+            try:
+                uc = resolver(ent)
+            except Exception:
+                uc = None
+            if uc:
+                l = f"{uc}  # {ent}"; ent = uc; mudou = True
+            else:
+                novas.append(l); continue  # tenta de novo na próxima
+        if ent not in ids: ids.append(ent); novas.append(l)
+        else: mudou = True  # duplicado removido
+    if mudou:
+        open(path, "w", encoding="utf-8").write("\n".join(novas) + "\n")
+    return ids
+
 def run(modo="completo"):
     completo = modo == "completo"
     with LOCK:
-        if os.environ.get("CANAIS"):  # nuvem: ids vêm de um secret, separados por vírgula
-            ids = [i.strip() for i in os.environ["CANAIS"].split(",") if i.strip()]
-        else:
-            ids = [l.split("#")[0].strip() for l in open(CANAIS_FILE, encoding="utf-8")]
-            ids = [i for i in ids if i]
+        ids = ler_canais()
         hist = json.load(open(HIST_FILE, encoding="utf-8")) if os.path.exists(HIST_FILE) else {"snapshots": [], "videos": {}}
         # canal novo sem lista ainda -> força completo
         conhecidos = {hv.get("canal") for hv in hist["videos"].values()}
@@ -166,7 +207,7 @@ def run(modo="completo"):
 if __name__ == "__main__":
     import time; t = time.time()
     p = run(sys.argv[1] if len(sys.argv) > 1 else "completo")
-    if not os.environ.get("CANAIS"):  # na nuvem (log público) não imprime nomes
+    if not os.environ.get("GITHUB_ACTIONS"):  # na nuvem (log público) não imprime nomes
         for c in p["canais"]: print(c.get("nome"), c.get("inscritos"), c["views_total"], c["n_videos"], c["erro"] or "")
     else:
         print("canais:", len(p["canais"]), "erros:", sum(1 for c in p["canais"] if c["erro"]),

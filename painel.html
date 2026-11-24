@@ -404,7 +404,7 @@ function viewCanal(c){
   var stUrl='https://studio.youtube.com/channel/'+encodeURIComponent(c.id)+'/analytics';
   h+='<div class="card"><div class="hdr">'+avatar(c,'l')+'<div style="flex:1;min-width:220px"><h1>'+esc(c.nome||c.id)+'</h1><div class="mut">'+esc(c.handle||'')+'</div>'+
     (c.descricao?'<div class="d" style="margin-top:6px">'+esc(c.descricao)+'</div>':'')+
-    '<div class="links"><a href="'+esc(chUrl)+'" target="_blank" rel="noopener">▶ Abrir no YouTube</a><a href="'+esc(stUrl)+'" target="_blank" rel="noopener">📊 YouTube Studio</a></div></div>'+
+    '<div class="links"><a href="'+esc(chUrl)+'" target="_blank" rel="noopener">▶ Abrir no YouTube</a><a href="'+esc(stUrl)+'" target="_blank" rel="noopener">📊 YouTube Studio</a><a href="javascript:void 0" class="rmch" data-rmch="'+esc(c.id)+'" data-nome="'+esc(c.nome||c.id)+'">✕ Remover do painel</a></div></div>'+
     '<div style="text-align:right"><div class="mut" style="font-size:12px;text-transform:uppercase">Inscritos</div><div style="font-size:30px;font-weight:700" title="'+(s.ins==null?'inscritos ocultos':fmtFull(s.ins))+'">'+fmt(s.ins)+'</div></div></div></div>';
   if(c.erro)h+='<div class="warn">Erro na coleta deste canal: '+esc(c.erro)+'</div>';
   if(!vs.length){
@@ -473,7 +473,7 @@ function render(){
   if(!window.PAINEL){main.innerHTML=(APP||NUVEM)?'<div class="card"><div class="empty">Carregando dados…</div></div>':'<div class="card"><div class="empty">Não foi possível carregar <b>dados.js</b>. Confira se ele está na mesma pasta do painel.html.</div></div>';document.getElementById('tabs').innerHTML='';updStatus();return;}
   var cur=null;cs.forEach(function(c){if(c.id===state.view)cur=c;});
   if(!cur)state.view='geral';
-  document.getElementById('tabs').innerHTML='<a class="tab all'+(state.view==='geral'?' on':'')+'" href="#geral">Visão geral</a>'+cs.map(function(c){return '<a class="tab'+(c.id===state.view?' on':'')+'" href="#'+esc(c.id)+'">'+avatar(c,'s')+esc(c.nome||c.id)+'</a>';}).join('');
+  document.getElementById('tabs').innerHTML='<a class="tab all'+(state.view==='geral'?' on':'')+'" href="#geral">Visão geral</a>'+cs.map(function(c){return '<a class="tab'+(c.id===state.view?' on':'')+'" href="#'+esc(c.id)+'">'+avatar(c,'s')+esc(c.nome||c.id)+'</a>';}).join('')+'<a class="tab addch" href="javascript:void 0" data-addch>＋ Canal</a>';
   var sy=window.scrollY;
   try{main.innerHTML=cur?viewCanal(cur):viewGeral();}
   catch(e){main.innerHTML='<div class="card"><div class="empty">Erro ao montar a página: '+esc(e.message)+'</div></div>';}
@@ -539,6 +539,99 @@ if(NUVEM){document.getElementById('reload').textContent='Atualizar';
   if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js');}
 setInterval(updStatus,30*1000);
 readHash();render();
+window.__painel={loadData:loadData,render:render,applyApi:applyApi,APP:APP,NUVEM:NUVEM,gistId:gistId};
+})();
+</script>
+<div id="chmodal" class="chm" hidden>
+  <div class="chm-box">
+    <h2 style="margin:0 0 6px">Adicionar canal</h2>
+    <div class="note" style="margin:0 0 10px">Cole o link do canal, o @handle ou o ID (UC…).</div>
+    <input id="chin" placeholder="https://www.youtube.com/@meucanal" autocomplete="off">
+    <div id="chkey" hidden>
+      <div class="note" style="margin:12px 0 6px">Primeira vez neste aparelho: o celular precisa de uma chave para editar sua lista.
+        <a href="https://github.com/settings/tokens/new?scopes=gist&description=Painel%20YT%20celular" target="_blank" rel="noopener" style="color:var(--acc)">1) Criar chave no GitHub</a>
+        (role até o fim e toque em <b>Generate token</b>; deixe só a permissão <b>gist</b>), 2) copie e cole aqui:</div>
+      <input id="chtok" placeholder="ghp_…" autocomplete="off">
+    </div>
+    <div id="chmsg" class="note" style="margin:10px 0 0"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">
+      <button type="button" id="chcancel">Cancelar</button>
+      <button type="button" id="chok" style="background:var(--acc);border-color:var(--acc);color:#fff">Adicionar</button>
+    </div>
+  </div>
+</div>
+<style>
+.tab.addch{border-style:dashed;color:var(--mut);padding-left:14px;cursor:pointer}
+.tab.addch:hover{color:var(--acc);border-color:var(--acc)}
+.rmch{color:var(--mut)!important}.rmch:hover{color:var(--bad)!important}
+.chm{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:99;padding:16px}
+.chm[hidden]{display:none}
+.chm-box{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;width:min(460px,100%)}
+.chm input{width:100%;background:var(--bg);color:var(--tx);border:1px solid var(--line);border-radius:8px;padding:10px;font:inherit}
+</style>
+<script>
+(function(){
+var M=document.getElementById('chmodal'),IN=document.getElementById('chin'),TK=document.getElementById('chtok'),
+    KEY=document.getElementById('chkey'),MSG=document.getElementById('chmsg'),OK=document.getElementById('chok');
+var GP=function(){return window.__painel||{};};
+function tok(){try{return localStorage.getItem('painel_token')||'';}catch(e){return '';}}
+function msg(t,bad){MSG.textContent=t;MSG.style.color=bad?'var(--bad)':'var(--tx)';}
+function norm(s){s=(s||'').trim();var m=s.match(/(UC[\w-]{22})/);if(m)return m[1];m=s.match(/@([\w.\-]+)/);if(m)return '@'+m[1];
+  if(/^[\w.\-]{3,}$/.test(s))return '@'+s;return null;}
+function abrir(){M.hidden=false;IN.value='';TK.value='';msg('');KEY.hidden=!(GP().NUVEM&&!tok());OK.disabled=false;setTimeout(function(){IN.focus();},50);}
+function fechar(){M.hidden=true;}
+// celular: edita canais.txt no gist com a chave guardada no aparelho
+function gistApi(method,body){
+  return fetch('https://api.github.com/gists/'+GP().gistId(),{method:method,cache:'no-store',
+    headers:{'Authorization':'Bearer '+tok(),'Accept':'application/vnd.github+json'},body:body?JSON.stringify(body):undefined})
+    .then(function(r){if(r.status===401||r.status===403||r.status===404){try{localStorage.removeItem('painel_token');}catch(e){}throw new Error('Chave inválida ou sem permissão de gist. Crie outra e tente de novo.');}
+      if(!r.ok)throw new Error('GitHub respondeu '+r.status);return r.json();});
+}
+function editarNuvem(fn){
+  return gistApi('GET').then(function(g){var f=g.files['canais.txt'];var linhas=(f?f.content:'').split('\n').filter(function(l){return l.trim();});
+    var nv=fn(linhas);if(typeof nv==='string')throw new Error(nv);
+    return gistApi('PATCH',{files:{'canais.txt':{content:nv.join('\n')+'\n'}}});});
+}
+function idsAtuais(){return ((window.PAINEL||{}).canais||[]).map(function(c){return c.id;});}
+OK.addEventListener('click',function(){
+  var ent=norm(IN.value);if(!ent){msg('Não reconheci. Cole o link do canal, o @handle ou o ID (UC…).',true);return;}
+  if(idsAtuais().indexOf(ent)>=0){msg('Esse canal já está no painel.',true);return;}
+  OK.disabled=true;
+  if(GP().APP){
+    msg('Adicionando e coletando… (~10 s)');
+    fetch('/api/canais/add?c='+encodeURIComponent(IN.value.trim())).then(function(r){return r.json();}).then(function(j){
+      if(j.erro_msg){msg(j.erro_msg,true);OK.disabled=false;return;}
+      GP().applyApi(j);fechar();}).catch(function(){msg('App offline.',true);OK.disabled=false;});
+    return;
+  }
+  if(GP().NUVEM){
+    if(!tok()){var t=TK.value.trim();if(!t){msg('Cole a chave do GitHub primeiro.',true);OK.disabled=false;return;}try{localStorage.setItem('painel_token',t);}catch(e){}}
+    msg('Salvando…');
+    editarNuvem(function(l){
+      if(l.some(function(x){return x.indexOf(ent)>=0;}))return 'Esse canal já está na lista.';
+      return l.concat([ent]);
+    }).then(function(){msg('✓ Canal adicionado! Ele aparece na próxima coleta: ~2 min com o PC ligado, até ~10–15 min só pela nuvem.');
+      setTimeout(fechar,4000);}).catch(function(e){msg(e.message,true);KEY.hidden=!!tok();OK.disabled=false;});
+    return;
+  }
+  msg('Abra pelo app (atalho Painel YouTube) ou pelo celular para adicionar canais.',true);OK.disabled=false;
+});
+document.getElementById('chcancel').addEventListener('click',fechar);
+M.addEventListener('click',function(e){if(e.target===M)fechar();});
+IN.addEventListener('keydown',function(e){if(e.key==='Enter')OK.click();});
+document.addEventListener('click',function(e){
+  var t=e.target.closest&&e.target.closest('[data-addch],[data-rmch]');if(!t)return;
+  e.preventDefault();e.stopPropagation();
+  if(t.hasAttribute('data-addch')){abrir();return;}
+  var id=t.getAttribute('data-rmch'),nome=t.getAttribute('data-nome');
+  if(!confirm('Remover "'+nome+'" do painel? (o histórico fica guardado)'))return;
+  if(GP().APP){fetch('/api/canais/remove?id='+encodeURIComponent(id)).then(function(r){return r.json();}).then(function(j){location.hash='geral';GP().applyApi(j);});return;}
+  if(GP().NUVEM){
+    if(!tok()){abrir();msg('Para remover pelo celular, configure a chave primeiro (é a mesma de adicionar).');return;}
+    editarNuvem(function(l){return l.filter(function(x){return x.indexOf(id)<0;});})
+      .then(function(){alert('Removido. Some do painel na próxima coleta.');}).catch(function(e){alert(e.message);});
+  }
+},true);
 })();
 </script>
 </body>
