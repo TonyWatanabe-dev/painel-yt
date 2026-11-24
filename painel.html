@@ -120,7 +120,7 @@ function fmt(v){if(!isn(v))return '—';var a=Math.abs(v);if(a>=1e6)return nf1.f
 function fmtFull(v){return isn(v)?nf.format(v):'—';}
 function fmtD(v){if(!isn(v))return '—';if(Math.abs(v)>=1000)return fmt(v);return nf1.format(v);}
 function fmtPct(v,d){if(!isn(v))return '—';return new Intl.NumberFormat('pt-BR',{maximumFractionDigits:d==null?1:d}).format(v)+'%';}
-function fmtDelta(v){if(!isn(v))return '—';return (v>0?'+':v<0?'−':'')+fmt(Math.abs(v));}
+function fmtDelta(v){if(!isn(v))return '—';if(v<0)v=0;return (v>0?'+':v<0?'−':'')+fmt(Math.abs(v));}
 function dcls(v){return !isn(v)?'mut':v>0?'pos':v<0?'neg':'mut';}
 function ts(iso){var t=Date.parse(iso);return isNaN(t)?null:t;}
 var dfDate=new Intl.DateTimeFormat('pt-BR',{timeZone:TZ,day:'2-digit',month:'2-digit',year:'numeric'});
@@ -146,7 +146,8 @@ function snaps(){return (P().snapshots||[]).filter(function(s){return ts(s.t)!=n
 function snapVal(s,id,m){
   var cs=s.canais||{};
   if(id){var c=cs[id];return c&&isn(c[m])?c[m]:null;}
-  var sum=0,any=false;for(var k in cs){var v=cs[k]&&cs[k][m];if(isn(v)){sum+=v;any=true;}}
+  var atuais={};canais().forEach(function(c){atuais[c.id]=1;});
+  var sum=0,any=false;for(var k in cs){if(!atuais[k])continue;var v=cs[k]&&cs[k][m];if(isn(v)){sum+=v;any=true;}}
   return any?sum:null;
 }
 function delta(id,m,ms){
@@ -155,7 +156,7 @@ function delta(id,m,ms){
   var target=ts(last.t)-ms,best=null,bd=Infinity;
   for(var i=0;i<S.length-1;i++){var v=snapVal(S[i],id,m);if(v==null)continue;var d=Math.abs(ts(S[i].t)-target);if(d<bd){bd=d;best=v;}}
   if(best==null||bd>ms*0.5)return null;
-  return cur-best;
+  return Math.max(0,cur-best);
 }
 function series(id,m){return snaps().map(function(s){return [ts(s.t),snapVal(s,id,m)];}).filter(function(p){return p[1]!=null;});}
 function pubT(v){return ts(v.publicado);}
@@ -168,7 +169,7 @@ function vDelta24(v){
   var last=s[s.length-1],lt=ts(last[0]),target=lt-DAY,best=null,bd=Infinity;
   for(var i=0;i<s.length-1;i++){var d=Math.abs(ts(s[i][0])-target);if(d<bd){bd=d;best=s[i][1];}}
   if(best==null||bd>DAY*0.5)return null;
-  return last[1]-best;
+  return Math.max(0,last[1]-best);
 }
 function hotRate(v){
   if(!isn(v.views))return null;
@@ -176,7 +177,7 @@ function hotRate(v){
   if(s.length>=2){
     var last=s[s.length-1],lt=ts(last[0]),target=lt-DAY,best=null,bd=Infinity;
     for(var i=0;i<s.length-1;i++){var d=Math.abs(ts(s[i][0])-target);if(d<bd){bd=d;best=s[i];}}
-    if(best){var dt=(lt-ts(best[0]))/HOUR;if(dt>=0.5)return {h:(last[1]-best[1])/dt,txt:fmtD((last[1]-best[1])/dt)+'/h',real:true};}
+    if(best){var dt=(lt-ts(best[0]))/HOUR;if(dt>=0.5){var hr=Math.max(0,(last[1]-best[1])/dt);return {h:hr,txt:fmtD(hr)+'/h',real:true};}}
   }
   var p=pubT(v);if(p==null)return null;
   var days=Math.max((refT()-p)/DAY,1);
