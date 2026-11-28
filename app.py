@@ -158,6 +158,10 @@ class H(SimpleHTTPRequestHandler):
             if err: return self._json({"erro_msg": err}, 400)
             p = coletar_agora("rapido", sync=False)
             return self._json({"dados": p, "coletando": False, "erro": STATE["erro"]})
+        if u.path == "/api/sair":  # o .vbs chama isto para reiniciar com a versão nova
+            self._json({"ok": True})
+            threading.Thread(target=lambda: (time.sleep(0.3), os._exit(0)), daemon=True).start()
+            return
         if u.path == "/api/ping":
             return self._json({"ok": True})
         return super().do_GET()
