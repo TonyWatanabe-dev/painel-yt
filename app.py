@@ -54,6 +54,29 @@ def sync_canais():
     except Exception:
         _TOKEN.pop("t", None)
 
+def gist_arquivo(nome):
+    f = gist_sync._req(GIST_ID, token())["files"].get(nome)
+    return f["content"] if f else None
+
+def sync_ocultos():
+    try:
+        txt = gist_arquivo("ocultos.txt")
+        if txt is not None: open(os.path.join(BASE, "ocultos.txt"), "w", encoding="utf-8").write(txt)
+    except Exception:
+        pass
+
+def ocultar_video(vid):
+    if not vid or not __import__("re").fullmatch(r"[\w-]{11}", vid): return "ID de vídeo inválido."
+    with CANAIS_LOCK:
+        try: txt = gist_arquivo("ocultos.txt") or ""
+        except Exception: txt = ""
+        p = os.path.join(BASE, "ocultos.txt")
+        if not txt and os.path.exists(p): txt = open(p, encoding="utf-8").read()
+        if vid not in txt: txt = txt.rstrip("\n") + ("\n" if txt.strip() else "") + vid + "\n"
+        open(p, "w", encoding="utf-8").write(txt)
+        gist_sync._req(GIST_ID, token(), json.dumps({"files": {"ocultos.txt": {"content": txt}}}).encode(), "PATCH")
+    return None
+
 def enviar_celular(antes):
     try:
         gist_sync.enviar(GIST_ID, token(), {"dados_pc.json": coletar.JSON_FILE})
@@ -65,7 +88,7 @@ def enviar_celular(antes):
         _TOKEN.pop("t", None)
 
 def coletar_agora(modo, sync=True):
-    if sync: sync_canais()
+    if sync: sync_canais(); sync_ocultos()
     STATE["coletando"] = True
     try:
         antes = open(coletar.CANAIS_FILE, encoding="utf-8").read()
@@ -128,6 +151,12 @@ class H(SimpleHTTPRequestHandler):
                 err = f"Falha: {ex}"
             if err: return self._json({"erro_msg": err}, 400)
             p = coletar_agora("completo", sync=False)
+            return self._json({"dados": p, "coletando": False, "erro": STATE["erro"]})
+        if u.path == "/api/videos/hide":
+            try: err = ocultar_video(q.get("id", [None])[0])
+            except Exception as ex: err = f"Falha: {ex}"
+            if err: return self._json({"erro_msg": err}, 400)
+            p = coletar_agora("rapido", sync=False)
             return self._json({"dados": p, "coletando": False, "erro": STATE["erro"]})
         if u.path == "/api/ping":
             return self._json({"ok": True})

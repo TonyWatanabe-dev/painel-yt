@@ -71,7 +71,13 @@ def ultimo(hv):
     s = hv.get("serie") or []
     return s[-1][1] if s else None
 
-def coletar_canal(cid, hist_videos, completo, pool):
+def ler_ocultos():
+    for p in (os.path.join(DATA, "ocultos.txt"), os.path.join(BASE, "ocultos.txt")):
+        if os.path.exists(p):
+            return {l.split("#")[0].strip() for l in open(p, encoding="utf-8") if l.split("#")[0].strip()}
+    return set()
+
+def coletar_canal(cid, hist_videos, completo, pool, ocultos=frozenset()):
     c = {"id": cid, "erro": None}
     fl = [pool.submit(flat, cid, a) for a in ("videos", "shorts")] if completo else []
     try: c.update(pagina(cid))
@@ -81,15 +87,20 @@ def coletar_canal(cid, hist_videos, completo, pool):
     vids = {}
     # base: lista conhecida (protege contra RSS/yt-dlp que às vezes voltam vazios)
     for vid, hv in hist_videos.items():
-        if hv.get("canal") == cid:
+        if hv.get("canal") == cid and not hv.get("removido"):
             vids[vid] = {"id": vid, "titulo": hv.get("titulo"), "views": ultimo(hv),
                          "duracao": hv.get("duracao"), "short": hv.get("short", False)}
+    vistos = set(r)
     if completo:
-        for f in fl:
-            for v in f.result():
+        listas = [f.result() for f in fl]
+        for v in (x for l in listas for x in l): vistos.add(v["id"])
+        c["_lista_ok"] = any(listas)
+        for l in listas:
+            for v in l:
                 old = vids.get(v["id"], {})
                 if v.get("views") is None: v["views"] = old.get("views")
                 vids[v["id"]] = v
+    c["_vistos"] = vistos
     for vid, v in r.items():
         base = vids.get(vid, {})
         merged = {**base, **{k: val for k, val in v.items() if val is not None}}
@@ -101,6 +112,11 @@ def coletar_canal(cid, hist_videos, completo, pool):
         for k in ("publicado", "likes", "duracao"):
             if v.get(k) is None: v[k] = old.get(k)
         if v.get("views") is None: v["views"] = ultimo(old)
+    # some quem saiu do ar (ausente em 2 coletas completas seguidas) e quem o Tony apagou no painel
+    for vid in list(vids):
+        hv = hist_videos.get(vid, {})
+        if vid in ocultos or (completo and c.get("_lista_ok") and vid not in vistos and hv.get("ausente", 0) >= 1):
+            del vids[vid]
     c["videos"] = sorted(vids.values(), key=lambda v: v.get("publicado") or "", reverse=True)
     c["views_total"] = sum(v.get("views") or 0 for v in c["videos"])
     c["likes_total"] = sum(v.get("likes") or 0 for v in c["videos"])
@@ -174,8 +190,18 @@ def run(modo="completo"):
             completo, modo = True, "completo"
         now = datetime.now(timezone.utc); agora = now.isoformat(timespec="seconds")
         with ThreadPoolExecutor(16) as pool, ThreadPoolExecutor(len(ids) or 1) as cpool:
-            canais = list(cpool.map(lambda i: coletar_canal(i, hist["videos"], completo, pool), ids))
+            ocultos = ler_ocultos()
+            canais = list(cpool.map(lambda i: coletar_canal(i, hist["videos"], completo, pool, ocultos), ids))
         for c in canais:
+            vistos, lista_ok = c.pop("_vistos", set()), c.pop("_lista_ok", False)
+            for vid, hv in hist["videos"].items():
+                if hv.get("canal") != c["id"]: continue
+                if vid in vistos:
+                    hv.pop("ausente", None); hv.pop("removido", None)
+                elif completo and lista_ok:
+                    hv["ausente"] = hv.get("ausente", 0) + 1
+                    if hv["ausente"] >= 2: hv["removido"] = True
+                if vid in ocultos: hv["removido"] = True
             for v in c["videos"]:
                 hv = hist["videos"].setdefault(v["id"], {"canal": c["id"], "serie": []})
                 hv["canal"] = c["id"]

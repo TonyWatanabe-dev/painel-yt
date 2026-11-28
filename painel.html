@@ -445,13 +445,13 @@ function viewCanal(c){
   var rows=vs.map(function(v){return {v:v,lp:(isn(v.likes)&&v.views>0)?v.likes/v.views*100:null,vpd:vViewsPerDay(v),d24:vDelta24(v),perf:(s.med>0&&isn(v.views))?v.views/s.med:null};});
   rows=sortRows(rows,state.sortVid,G);
   h+='<div class="card"><h2>Vídeos <span class="mut" style="font-weight:400;font-size:12px">clique numa linha para ver a evolução de views</span></h2><div class="tw"><table><thead><tr><th class="t">Thumb</th>'+
-    th('v','titulo','Título','t')+th('v','tipo','Tipo')+th('v','dur','Duração')+th('v','pub','Publicado')+th('v','views','Views')+th('v','likes','Likes')+th('v','likepct','Like %')+th('v','vpd','Views/dia')+th('v','d24','Δ 24h')+th('v','perf','vs mediana')+'</tr></thead><tbody>';
+    th('v','titulo','Título','t')+th('v','tipo','Tipo')+th('v','dur','Duração')+th('v','pub','Publicado')+th('v','views','Views')+th('v','likes','Likes')+th('v','likepct','Like %')+th('v','vpd','Views/dia')+th('v','d24','Δ 24h')+th('v','perf','vs mediana')+'<th></th></tr></thead><tbody>';
   rows.forEach(function(r){
     var v=r.v,p=pubT(v),perfCls=r.perf==null?'mut':r.perf>=1?'pos':'neg';
     h+='<tr class="vr" data-v="'+esc(v.id)+'"><td class="t"><img class="thumb" loading="lazy" src="https://i.ytimg.com/vi/'+esc(v.id)+'/mqdefault.jpg" alt="" onerror="this.style.visibility=\'hidden\'"></td>'+
       '<td class="t ttl">'+vlink(v)+'</td><td><span class="badge'+(v.short?' sh':'')+'">'+(v.short?'Short':'Longo')+'</span></td><td>'+fDur(v.duracao)+'</td>'+
       '<td>'+(p==null?'—':fDate(p)+' <span class="mut">('+daysAgoTxt(p)+')</span>')+'</td><td title="'+fmtFull(v.views)+'">'+fmt(v.views)+'</td><td>'+fmt(v.likes)+'</td><td>'+fmtPct(r.lp,2)+'</td><td>'+fmtD(r.vpd)+'</td>'+
-      '<td class="'+dcls(r.d24)+'">'+(r.d24==null?'—':fmtDelta(r.d24))+'</td><td class="'+perfCls+'"><b>'+(r.perf==null?'—':nf1.format(r.perf)+'×')+'</b></td></tr>';
+      '<td class="'+dcls(r.d24)+'">'+(r.d24==null?'—':fmtDelta(r.d24))+'</td><td class="'+perfCls+'"><b>'+(r.perf==null?'—':nf1.format(r.perf)+'×')+'</b></td><td><a href="javascript:void 0" class="delv" title="Apagar do painel (vídeo que saiu do ar)" data-delv="'+esc(v.id)+'">🗑</a></td></tr>';
     if(state.open[v.id]){
       h+='<tr class="exp"><td colspan="11" style="text-align:left"><div class="chart" id="sp-'+esc(v.id)+'"></div><div class="note" id="sp-'+esc(v.id)+'n"></div></td></tr>';
       post.push(function(){
@@ -468,7 +468,13 @@ function viewCanal(c){
 
 /* ---------- render ---------- */
 function readHash(){var h=decodeURIComponent((location.hash||'').replace(/^#/,''));state.view=h||'geral';}
+function ocultosLocais(){try{return JSON.parse(localStorage.getItem('painel_ocultos')||'[]');}catch(e){return [];}}
+function limparOcultos(){var o=ocultosLocais();if(!o.length||!window.PAINEL)return;var set={};o.forEach(function(x){set[x]=1;});
+  canais().forEach(function(c){var vs=c.videos||[],nv=vs.filter(function(v){return !set[v.id];});if(nv.length===vs.length)return;
+    c.videos=nv;c.n_videos=nv.length;c.n_shorts=nv.filter(function(v){return v.short;}).length;
+    c.views_total=nv.reduce(function(s,v){return s+(v.views||0);},0);c.likes_total=nv.reduce(function(s,v){return s+(v.likes||0);},0);});}
 function render(){
+  limparOcultos();
   post=[];
   var cs=canais(),main=document.getElementById('main');
   if(!window.PAINEL){main.innerHTML=(APP||NUVEM)?'<div class="card"><div class="empty">Carregando dados…</div></div>':'<div class="card"><div class="empty">Não foi possível carregar <b>dados.js</b>. Confira se ele está na mesma pasta do painel.html.</div></div>';document.getElementById('tabs').innerHTML='';updStatus();return;}
@@ -540,7 +546,7 @@ if(NUVEM){document.getElementById('reload').textContent='Atualizar';
   if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js');}
 setInterval(updStatus,30*1000);
 readHash();render();
-window.__painel={loadData:loadData,render:render,applyApi:applyApi,APP:APP,NUVEM:NUVEM,gistId:gistId};
+window.__painel={limparOcultos:limparOcultos,loadData:loadData,render:render,applyApi:applyApi,APP:APP,NUVEM:NUVEM,gistId:gistId};
 })();
 </script>
 <div id="chmodal" class="chm" hidden>
@@ -564,6 +570,7 @@ window.__painel={loadData:loadData,render:render,applyApi:applyApi,APP:APP,NUVEM
 <style>
 .tab.addch{border-style:dashed;color:var(--mut);padding-left:14px;cursor:pointer}
 .tab.addch:hover{color:var(--acc);border-color:var(--acc)}
+.delv{opacity:.45;padding:4px 6px}.delv:hover{opacity:1}
 .rmch{color:var(--mut)!important}.rmch:hover{color:var(--bad)!important}
 .chm{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:99;padding:16px}
 .chm[hidden]{display:none}
@@ -594,6 +601,20 @@ function editarNuvem(fn){
     return gistApi('PATCH',{files:{'canais.txt':{content:nv.join('\n')+'\n'}}});});
 }
 function idsAtuais(){return ((window.PAINEL||{}).canais||[]).map(function(c){return c.id;});}
+function apagarVideo(id){
+  var tit='';((window.PAINEL||{}).canais||[]).forEach(function(c){(c.videos||[]).forEach(function(v){if(v.id===id)tit=v.titulo||id;});});
+  if(!confirm('Apagar do painel o vídeo "'+tit+'"?\n(use para vídeos que você tirou do ar)'))return;
+  var o=[];try{o=JSON.parse(localStorage.getItem('painel_ocultos')||'[]');}catch(e){}
+  if(o.indexOf(id)<0)o.push(id);try{localStorage.setItem('painel_ocultos',JSON.stringify(o));}catch(e){}
+  GP().render();  // some na hora neste aparelho
+  if(GP().APP){fetch('/api/videos/hide?id='+encodeURIComponent(id)).then(function(r){return r.json();}).then(function(j){if(j.dados)GP().applyApi(j);});return;}
+  if(GP().NUVEM){
+    if(!tok()){abrir();msg('Sumiu só deste aparelho. Para apagar em todos (PC e nuvem), configure a chave do GitHub uma vez — depois apague de novo.');return;}
+    gistApi('GET').then(function(g){var f=g.files['ocultos.txt'];var txt=f?f.content:'';
+      if(txt.indexOf(id)>=0)return;return gistApi('PATCH',{files:{'ocultos.txt':{content:(txt.trim()?txt.replace(/\n*$/,'\n'):'')+id+'\n'}}});})
+      .catch(function(e){alert(e.message);});
+  }
+}
 OK.addEventListener('click',function(){
   var ent=norm(IN.value);if(!ent){msg('Não reconheci. Cole o link do canal, o @handle ou o ID (UC…).',true);return;}
   if(idsAtuais().indexOf(ent)>=0){msg('Esse canal já está no painel.',true);return;}
@@ -621,6 +642,8 @@ document.getElementById('chcancel').addEventListener('click',fechar);
 M.addEventListener('click',function(e){if(e.target===M)fechar();});
 IN.addEventListener('keydown',function(e){if(e.key==='Enter')OK.click();});
 document.addEventListener('click',function(e){
+  var dv=e.target.closest&&e.target.closest('[data-delv]');
+  if(dv){e.preventDefault();e.stopPropagation();apagarVideo(dv.getAttribute('data-delv'));return;}
   var t=e.target.closest&&e.target.closest('[data-addch],[data-rmch]');if(!t)return;
   e.preventDefault();e.stopPropagation();
   if(t.hasAttribute('data-addch')){abrir();return;}
